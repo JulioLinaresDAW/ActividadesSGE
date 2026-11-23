@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Matriz de decisión ERP · Odoo Enterprise frente a MS Dynamics 365 Business Central</title>
+<style>
+  :root { --blue:#469FDC; --light:#AFD1F2; --dark:#1B3A57; --line:#3A4A5A; }
+  body { font-family: Arial, Helvetica, sans-serif; color:#222; max-width:960px; margin:24px auto; padding:0 16px; }
+  h1 { color:var(--dark); font-size:22px; margin:0 0 4px; }
+  .sub { color:#666; font-size:13px; margin-bottom:16px; }
+  .tabs button { border:1px solid var(--line); background:#fff; padding:8px 16px; cursor:pointer; font-size:14px; }
+  .tabs button.on { background:var(--blue); color:#fff; font-weight:bold; }
+  .desc { font-size:13px; margin:12px 0; }
+  table.m { border-collapse:collapse; width:100%; margin-top:6px; }
+  table.m th, table.m td { border:1px solid var(--line); padding:8px; text-align:center; font-size:14px; }
+  table.m th, table.m td.crit { background:var(--blue); color:#fff; font-weight:bold; }
+  table.m td { background:var(--light); color:var(--dark); }
+  table.m td.crit { text-align:left; }
+  table.m tr.tot td, table.m tr.tot th { background:var(--blue); color:#fff; font-weight:bold; font-size:16px; }
+  table.m tr.tot td.vacio { background:none; border:none; }
+  input[type=number], select { width:64px; padding:4px; font-size:14px; text-align:center; }
+  .win { outline:3px solid #1B7F3B; outline-offset:-3px; }
+  .info { font-size:13px; margin:10px 0; }
+  .ko { color:#b00020; font-weight:bold; }
+  .ok { color:#1B7F3B; font-weight:bold; }
+  button.reset { margin-top:6px; padding:6px 12px; cursor:pointer; }
+  details { margin:6px 0; font-size:13px; }
+  summary { cursor:pointer; font-weight:bold; color:var(--dark); }
+  details p { margin:4px 0 4px 16px; }
+  .formula { font-size:12px; color:#666; margin-top:14px; }
+</style>
+</head>
+<body>
+<h1>Matriz de decisión para la selección de un ERP</h1>
+<div class="sub">Sistemas de Gestión Empresarial · UT 1 · Odoo Enterprise frente a Microsoft Dynamics 365 Business Central</div>
+<div class="tabs" id="tabs"></div>
+<div class="desc" id="desc"></div>
+<table class="m" id="tabla"></table>
+<div class="info" id="info"></div>
+<button class="reset" id="reset">Restablecer valores de la entrega</button>
+<h2 style="font-size:16px;color:#1B3A57;margin-top:20px">Justificación de cada nota</h2>
+<div id="just"></div>
+<div class="formula">Puntuación ponderada = (nota × peso) / 3, con notas de 0 a 3 (0 no cumple, 1 parcial, 2 cumple, 3 cumple muy bien). La suma da la nota sobre 100.</div>
+
+<script>
+// ---------- CONFIGURACIÓN (se puede editar aquí o directamente en la página) ----------
+const ERPS = [
+  { id: "odoo", nombre: "Odoo Enterprise" },
+  { id: "bc",   nombre: "MS Dynamics 365 Business Central" }
+];
+
+const EMPRESAS = {
+  super: {
+    nombre: "Supermercado La Plaza",
+    descripcion: "5 personas, 1 tienda, 2.500 referencias, 40 proveedores, presupuesto muy limitado. Necesita TPV integrado con inventario, caducidades, compras, informes y VeriFactu.",
+    criterios: [
+      { nombre: "Cobertura funcional", peso: 30, odoo: 3, bc: 1,
+        j: { odoo: "TPV, inventario, compras y caducidades por lotes dentro del mismo sistema.",
+             bc: "No incluye TPV: hace falta un complemento de terceros de pago (LS Express o LS Central)." } },
+      { nombre: "TCO a 5 años", peso: 30, odoo: 2, bc: 1,
+        j: { odoo: "Estándar a 14,90 € por usuario y mes; unos 21.500 € en 5 años con 5 usuarios.",
+             bc: "Essentials a 69,30 € por usuario y mes; unos 37.800 € en 5 años sin contar el TPV." } },
+      { nombre: "Integraciones", peso: 10, odoo: 2, bc: 2,
+        j: { odoo: "Todo viene integrado de serie; TPV con básculas y lectores. API externa solo en el plan Custom.",
+             bc: "Tiene API y conectores, pero el TPV es un complemento que hay que conectar." } },
+      { nombre: "Facilidad y app móvil", peso: 15, odoo: 2, bc: 1,
+        j: { odoo: "TPV en tableta, con o sin conexión; app móvil y PWA para que los dueños vean ventas.",
+             bc: "App móvil para un conjunto limitado de escenarios; pensado para pymes de 20 a 100 personas." } },
+      { nombre: "Normativa española / VeriFactu", peso: 10, odoo: 3, bc: 1,
+        j: { odoo: "PGCE y Veri*Factu, también en el TPV; integración gratuita con FACe.",
+             bc: "VeriFactu con B2Brouter o modo integrado; no comprobado en el TPV de terceros." } },
+      { nombre: "Partners y soporte", peso: 5, odoo: 2, bc: 2,
+        j: { odoo: "Partners en Valencia: Dynapps ES e InDaws.",
+             bc: "Laberit Sistemas en Valencia; el TPV exigiría además un partner del complemento." } }
+    ]
+  },
+  reformas: {
+    nombre: "Reformas Levante",
+    descripcion: "45 empleados, 6 M€ de facturación, 15-20 obras a la vez, 120 proveedores, 25 subcontratas, 2 delegaciones. Necesita CRM, presupuestos, costes por obra, horas y app móvil.",
+    criterios: [
+      { nombre: "Cobertura funcional", peso: 35, odoo: 2, bc: 2,
+        j: { odoo: "CRM, ventas, compras, inventario y rentabilidad por proyecto vía cuenta analítica; sin certificaciones de obra de serie.",
+             bc: "Proyectos con presupuesto, WIP y horas; CRM básico; sin certificaciones de obra de serie." } },
+      { nombre: "TCO a 5 años", peso: 15, odoo: 3, bc: 2,
+        j: { odoo: "Plan Custom a 22,40 € por usuario y mes; unos 99.300 € en 5 años con 30 usuarios.",
+             bc: "20 Essentials y 10 Team Members; unos 146.300 € en 5 años." } },
+      { nombre: "Integraciones", peso: 15, odoo: 2, bc: 3,
+        j: { odoo: "API externa solo en el plan Custom; sin integración con Microsoft 365 equivalente a la de BC en las fuentes consultadas.",
+             bc: "Power BI, Power Automate, Power Apps, Teams y Outlook; sincroniza con Dynamics 365 Sales." } },
+      { nombre: "Facilidad y app móvil", peso: 15, odoo: 2, bc: 2,
+        j: { odoo: "App Android e iOS y PWA para que los jefes de obra consulten y registren datos.",
+             bc: "App iOS y Android pensada para tareas ligeras; la gestión pesada va en el cliente web." } },
+      { nombre: "Normativa española / VeriFactu", peso: 10, odoo: 3, bc: 2,
+        j: { odoo: "PGCE y Veri*Factu; factura electrónica B2B desde el 6 de octubre de 2028.",
+             bc: "VeriFactu con B2Brouter o modo integrado en despliegue, algo menos maduro." } },
+      { nombre: "Partners y soporte", peso: 10, odoo: 2, bc: 2,
+        j: { odoo: "Dynapps ES, InDaws y tic2web en Valencia.",
+             bc: "Laberit Sistemas, Microsoft Solutions Partner con sede en Valencia." } }
+    ]
+  }
+};
+
+// ---------- LÓGICA ----------
+const original = JSON.parse(JSON.stringify(EMPRESAS));
+let datos = JSON.parse(JSON.stringify(EMPRESAS));
+let actual = "super";
+
+const $ = id => document.getElementById(id);
+const fmt = n => n.toFixed(1).replace(".", ",");
+
+function total(emp, erp) {
+  return datos[emp].criterios.reduce((s, c) => s + (c[erp] * c.peso) / 3, 0);
+}
+
+function el(tag, props, ...hijos) {
+  const e = document.createElement(tag);
+  Object.assign(e, props || {});
+  hijos.forEach(h => e.append(h));
+  return e;
+}
+
+function pintar() {
+  const emp = datos[actual];
+  // pestañas
+  $("tabs").replaceChildren(...Object.keys(datos).map(k =>
+    el("button", { textContent: datos[k].nombre, className: k === actual ? "on" : "",
+                   onclick: () => { actual = k; pintar(); } })));
+  $("desc").textContent = emp.descripcion;
+
+  // tabla
+  const t = $("tabla"); t.replaceChildren();
+  t.append(el("tr", {}, el("th", { textContent: "Criterios" }), el("th", { textContent: "Ponderación (%)" }),
+    ...ERPS.map(e => el("th", { textContent: e.nombre }))));
+  emp.criterios.forEach((c, i) => {
+    const peso = el("input", { type: "number", min: 0, max: 100, value: c.peso,
+      oninput: ev => { c.peso = Number(ev.target.value) || 0; recalcular(); } });
+    const fila = el("tr", {}, el("td", { textContent: c.nombre, className: "crit" }), el("td", {}, peso));
+    ERPS.forEach(e => {
+      const sel = el("select", { onchange: ev => { c[e.id] = Number(ev.target.value); recalcular(); } });
+      [0, 1, 2, 3].forEach(v => sel.append(el("option", { value: v, textContent: v, selected: v === c[e.id] })));
+      fila.append(el("td", {}, sel));
+    });
+    t.append(fila);
+  });
+  const filaTotal = el("tr", { className: "tot" }, el("td", { className: "vacio" }), el("th", { id: "sumapesos" }),
+    ...ERPS.map(e => el("td", { id: "tot-" + e.id })));
+  t.append(filaTotal);
+
+  // justificaciones
+  $("just").replaceChildren(...emp.criterios.map(c => {
+    const d = el("details", {}, el("summary", { textContent: c.nombre }));
+    ERPS.forEach(e => d.append(el("p", { textContent: e.nombre + " (" + c[e.id] + "): " + c.j[e.id] })));
+    return d;
+  }));
+  recalcular();
+}
+
+function recalcular() {
+  const emp = datos[actual];
+  const suma = emp.criterios.reduce((s, c) => s + c.peso, 0);
+  $("sumapesos").textContent = "Total " + suma;
+  const tots = ERPS.map(e => total(actual, e.id));
+  ERPS.forEach((e, i) => {
+    const td = $("tot-" + e.id);
+    td.textContent = fmt(tots[i]);
+    td.classList.toggle("win", tots[i] === Math.max(...tots));
+  });
+  const ganador = tots[0] === tots[1] ? "Empate" : ERPS[tots[0] > tots[1] ? 0 : 1].nombre;
+  $("info").replaceChildren(
+    el("span", { className: suma === 100 ? "ok" : "ko",
+      textContent: suma === 100 ? "Los pesos suman 100. " : "Atención: los pesos suman " + suma + ", deberían sumar 100. " }),
+    "Mejor puntuación: " + ganador + " (" + ERPS.map((e, i) => fmt(tots[i])).join(" frente a ") + " sobre 100).");
+}
+
+$("reset").onclick = () => { datos = JSON.parse(JSON.stringify(original)); pintar(); };
+pintar();
+</script>
+</body>
+</html>
